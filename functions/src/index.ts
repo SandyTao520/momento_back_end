@@ -1,10 +1,11 @@
 import * as functions from 'firebase-functions';
 
-import * as Storage from '@google-cloud/firestore';
-const gcs = Storage();
+const {Storage} = require('@google-cloud/storage');
+// Creates a client
+const gcs = new Storage();
 
 import { tmpdir } from 'os';
-import { join, dirname } from 'path';
+import { join } from 'path';
 
 import * as sharp from 'sharp';
 import * as fs from 'fs-extra';
@@ -12,41 +13,55 @@ import * as fs from 'fs-extra';
 export const generateThumbnails = functions.storage
     .object()
     .onFinalize(async object => {
-        const bucket = gcs.bucket(object.bucket);
-        const filePath = object.name;
-        const fileName = filePath.split('/').pop();
-        const bucketDir = dirname(filePath);
-
-        const workingDir = join(tmpdir(), 'thumbnails');
-
-        const tmpFilePath = join(workingDir, 'source.png');
-
-        if ( !object.contentType.includes('image')) {
+        if (!object.contentType!.includes('image')) {
             return false;
         }
+        // get bucket
+        const bucket = gcs.bucket(object.bucket);
+        // get full file path
+        const filePath = object.name;
+        const pathArray = filePath!.split('/');
+        // get filename and type
+        const fileName = pathArray[pathArray.length - 1];
+        if (pathArray[pathArray.length - 2] == "thumbnails") {
+            return false;
+        }
+        const imageType = pathArray[pathArray.length - 3];
+        // set upload bucket directory
+        const uploadDir = pathArray.slice(0, pathArray.length - 2).join('/') + '/thumbnails';
 
-        await fs.ensureDir(workingDir);
+        // handle artefact thumbnail generation
+        if (imageType == "artefacts") {
+            // create tempororary working directory
+            const workingDir = join(tmpdir(), 'thumbnails');
+            const tmpFilePath = join(workingDir, 'source');
 
-        await bucket.file(filePath).download({
-            destination: tmpFilePath
-        })
+            // 1 - ensure directory exists
+            await fs.ensureDir(workingDir);
 
-        const thumbnailPromise = Promise
+            // 2 - download original file from bucket
+            await bucket.file(filePath).download({
+                destination: tmpFilePath
+            })
 
-        const thumbnailName = '${fileName}@128';
-        const thumbnailPath = join(workingDir, thumbnailName);
+            // 3 - convert sizes
+            const sizes = [128];
+            const uploadPromises = sizes.map(async size => {
+                const thumbnailPath = join(workingDir, fileName);
 
-        await sharp(tmpFilePath)
-            .resize(128, 128)
-            .toFile(thumbnailPath)
+                await sharp(tmpFilePath)
+                    .resize(size, size)
+                    .toFile(thumbnailPath)
 
-        return bucket.upload(thumbnailPath, {
-            destination: join(bucketDir, thumbnailName)
-        });
+                return bucket.upload(thumbnailPath, {
+                    destination: join(uploadDir, fileName)
+                });
+            });
 
-        await Promise.all();
+            await Promise.all(uploadPromises);
 
-        const uploadPromise = 
+            return fs.remove(workingDir);
+        } else {
+            return false;
+        }
     });
-
-
