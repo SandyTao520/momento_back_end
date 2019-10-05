@@ -14,12 +14,14 @@
   },
   "main": "lib/index.js",
   "dependencies": {
+    "@firebase/functions-types": "^0.3.8",
     "@google-cloud/storage": "^3.3.1",
     "@types/fs-extra": "^8.0.0",
     "@types/sharp": "^0.22.3",
     "firebase-admin": "^8.0.0",
-    "firebase-functions": "^3.1.0",
+    "firebase-functions": "^3.2.0",
     "fs-extra": "^8.1.0",
+    "packages": "0.0.8",
     "sharp": "^0.23.1"
   },
   "devDependencies": {

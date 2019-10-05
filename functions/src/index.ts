@@ -10,7 +10,9 @@ import { join } from 'path';
 import * as sharp from 'sharp';
 import * as fs from 'fs-extra';
 
-export const generateThumbnails = functions.storage
+export const generateThumbnails = functions
+    .region('asia-northeast1')
+    .storage
     .object()
     .onFinalize(async object => {
         if (!object.contentType!.includes('image')) {
