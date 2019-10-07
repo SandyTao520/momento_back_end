@@ -10,11 +10,16 @@ import { join } from 'path';
 import * as sharp from 'sharp';
 import * as fs from 'fs-extra';
 
+/*
+    Generate a thumbnail and place in the same level of the "original" folder
+    the thumbnail has the same name as the original photo
+*/
 export const generateThumbnails = functions
     .region('asia-northeast1')
     .storage
     .object()
     .onFinalize(async object => {
+        // skip any non-image objects
         if (!object.contentType!.includes('image')) {
             return false;
         }
@@ -25,6 +30,7 @@ export const generateThumbnails = functions
         const pathArray = filePath!.split('/');
         // get filename and type
         const fileName = pathArray[pathArray.length - 1];
+        // skip if it is already a thumbnail
         if (pathArray[pathArray.length - 2] == "thumbnails") {
             return false;
         }
@@ -33,10 +39,10 @@ export const generateThumbnails = functions
         const uploadDir = pathArray.slice(0, pathArray.length - 2).join('/') + '/thumbnails';
 
         // handle artefact thumbnail generation
-        if (imageType == "artefacts") {
+        if (["artefacts", "members", "events"].includes(imageType)) {
             // create tempororary working directory
             const workingDir = join(tmpdir(), 'thumbnails');
-            const tmpFilePath = join(workingDir, 'source');
+            const tmpFilePath = join(workingDir, "source_" + fileName);
 
             // 1 - ensure directory exists
             await fs.ensureDir(workingDir);
@@ -46,13 +52,27 @@ export const generateThumbnails = functions
                 destination: tmpFilePath
             })
 
-            // 3 - convert sizes
-            const sizes = [128];
+            // 3 - define sizes based on image type
+            var sizes = [256];
+            switch (imageType) {
+                case "artefacts":
+                    sizes = [256];
+                    break;
+                case "members":
+                    sizes = [128];
+                    break;
+                case "events":
+                    sizes = [512];
+                    break;
+            }
+
+            // create convert and upload promises
             const uploadPromises = sizes.map(async size => {
                 const thumbnailPath = join(workingDir, fileName);
 
                 await sharp(tmpFilePath)
                     .resize(size, size)
+                    .withMetadata()
                     .toFile(thumbnailPath)
 
                 return bucket.upload(thumbnailPath, {
@@ -60,8 +80,10 @@ export const generateThumbnails = functions
                 });
             });
 
+            // wait for the promises
             await Promise.all(uploadPromises);
 
+            // clean up
             return fs.remove(workingDir);
         } else {
             return false;
