@@ -1,11 +1,11 @@
 import * as functions from 'firebase-functions';
 
-const {Storage} = require('@google-cloud/storage');
 // Creates a client
+const {Storage} = require('@google-cloud/storage');
 const gcs = new Storage();
 
 import { tmpdir } from 'os';
-import { join } from 'path';
+import { join, dirname } from 'path';
 
 import * as sharp from 'sharp';
 import * as fs from 'fs-extra';
@@ -27,19 +27,29 @@ export const generateThumbnails = functions
         const bucket = gcs.bucket(object.bucket);
         // get full file path
         const filePath = object.name;
-        const pathArray = filePath!.split('/');
-        // get filename and type
-        const fileName = pathArray[pathArray.length - 1];
-        // skip if it is already a thumbnail
-        if (pathArray[pathArray.length - 2] == "thumbnails") {
+        // get filename
+        const fullFileName = filePath!.split('/').pop()!;
+
+        // skip already uploaded feature
+        if (fullFileName.includes("thumbnail")) {
             return false;
         }
-        const imageType = pathArray[pathArray.length - 3];
+
+        const fileNameArray = fullFileName.split('.')
+        let extension = "";
+        let fileName = "";
+        if (fileNameArray.length == 2) {
+            fileName = fileNameArray[0];
+            extension = fileNameArray[1];
+        }
+
+
         // set upload bucket directory
-        const uploadDir = pathArray.slice(0, pathArray.length - 2).join('/') + '/thumbnails';
+        const uploadDir = dirname(filePath!);
+        const uploadName = fileName + "@thumbnail." + extension
 
         // handle artefact thumbnail generation
-        if (["artefacts", "members", "events"].includes(imageType)) {
+        if (fileName.includes("artefact") || fileName.includes("member") || fileName.includes("event") ) {
             // create tempororary working directory
             const workingDir = join(tmpdir(), 'thumbnails');
             const tmpFilePath = join(workingDir, "source_" + fileName);
@@ -53,22 +63,19 @@ export const generateThumbnails = functions
             })
 
             // 3 - define sizes based on image type
-            var sizes = [256];
-            switch (imageType) {
-                case "artefacts":
-                    sizes = [256];
-                    break;
-                case "members":
-                    sizes = [128];
-                    break;
-                case "events":
-                    sizes = [512];
-                    break;
+            let sizes = [256];
+            if (fileName.includes("artefact")) {
+                sizes = [256];
+            } else if (fileName.includes("member")) {
+                sizes = [256];
+            } else {
+                sizes = [512];
             }
 
             // create convert and upload promises
+            const destinationPath = join(uploadDir, uploadName);
             const uploadPromises = sizes.map(async size => {
-                const thumbnailPath = join(workingDir, fileName);
+                const thumbnailPath = join(workingDir, uploadName);
 
                 await sharp(tmpFilePath)
                     .resize(size, size)
@@ -76,7 +83,7 @@ export const generateThumbnails = functions
                     .toFile(thumbnailPath)
 
                 return bucket.upload(thumbnailPath, {
-                    destination: join(uploadDir, fileName)
+                    destination: destinationPath
                 });
             });
 
