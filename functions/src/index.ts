@@ -28,25 +28,16 @@ export const generateThumbnails = functions
         // get full file path
         const filePath = object.name;
         // get filename
-        const fullFileName = filePath!.split('/').pop()!;
+        const fileName = filePath!.split('/').pop()!;
 
         // skip already uploaded feature
-        if (fullFileName.includes("thumbnail")) {
+        if (fileName.includes("thumbnail")) {
             return false;
         }
 
-        const fileNameArray = fullFileName.split('.')
-        let extension = "";
-        let fileName = "";
-        if (fileNameArray.length == 2) {
-            fileName = fileNameArray[0];
-            extension = fileNameArray[1];
-        }
-
-
         // set upload bucket directory
         const uploadDir = dirname(filePath!);
-        const uploadName = fileName + "@thumbnail." + extension
+        let uploadName = fileName + "@thumbnail"
 
         // handle artefact thumbnail generation
         if (fileName.includes("artefact") || fileName.includes("member") || fileName.includes("event") ) {
@@ -59,8 +50,9 @@ export const generateThumbnails = functions
 
             // 2 - download original file from bucket
             await bucket.file(filePath).download({
-                destination: tmpFilePath
+                destination: tmpFilePath,
             })
+            const [metadata] = await bucket.file(filePath).getMetadata();
 
             // 3 - define sizes based on image type
             let sizes = [256];
@@ -83,7 +75,8 @@ export const generateThumbnails = functions
                     .toFile(thumbnailPath)
 
                 return bucket.upload(thumbnailPath, {
-                    destination: destinationPath
+                    destination: destinationPath,
+                    contentType: metadata["contentType"],
                 });
             });
 
