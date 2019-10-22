@@ -43,7 +43,7 @@ export const generateThumbnails = functions
         if (fileName.includes("artefact") || fileName.includes("member") || fileName.includes("event") ) {
             // create tempororary working directory
             const workingDir = join(tmpdir(), 'thumbnails');
-            const tmpFilePath = join(workingDir, "source_" + fileName);
+            const tmpFilePath = join(workingDir, "source_" + fileName + Math.random().toString);
 
             // 1 - ensure directory exists
             await fs.ensureDir(workingDir);
